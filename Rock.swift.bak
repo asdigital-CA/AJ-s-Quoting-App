@@ -1,0 +1,258 @@
+// Refactored SwiftUI app with selectedRockId and manual product input + estimated volume in lbs and 40lb bags
+
+import SwiftUI
+
+struct Rock: Identifiable {
+    var id = UUID()
+    var name: String
+    var type: String // "Decorative" or "Aggregate"
+    var price: Double
+}
+
+struct ManualProduct: Identifiable {
+    var id = UUID()
+    var name: String
+    var supplier: String
+    var type: String // "Soil", "Mulch", "Rock"
+    var price: Double
+}
+
+struct ContentView: View {
+    @State private var length: String = ""
+    @State private var width: String = ""
+    @State private var depth: String = ""
+    @State private var materialType = "Soil"
+    @State private var addCompaction = false
+    @State private var soilGrade = "Grade 1"
+    @State private var mulchType = "🇨🇦 Red"
+    @State private var selectedRockId: UUID? = nil
+    @State private var rockTypeFilter = "All"
+    @State private var rockSortOption = "None"
+    @State private var result: String = ""
+    @State private var resultLbs: String = ""
+    @State private var resultBags: String = ""
+    @State private var priceNoHST: String = ""
+    @State private var priceWithHST: String = ""
+    @State private var priceWithMarkup: String = ""
+
+    let materialOptions = ["Soil", "Mulch", "Rock"]
+    let soilGrades = ["Grade 1", "Grade 2"]
+    let mulchTypes = ["🇨🇦 Red", "Dyed"]
+    let rockSortOptions = ["None", "Price: Low to High", "Alphabetical"]
+    let rockTypes = ["All", "Decorative", "Aggregate"]
+
+    let rocks: [Rock] = [
+        Rock(name: "Beachstone (Lg. | Blue)", type: "Decorative", price: 98.50),
+        Rock(name: "Beachstone (Oversize)", type: "Decorative", price: 94),
+        Rock(name: "Beachstone (Regular)", type: "Decorative", price: 94),
+        Rock(name: "Beachstone (Sm. | Blue)", type: "Decorative", price: 98.50),
+        Rock(name: "Beechwood Pebbles (Stonebark)", type: "Decorative", price: 225),
+        Rock(name: "Black Grey Granite (w/ pink)", type: "Decorative", price: 162.75),
+        Rock(name: "Slatescape (🇺🇸)", type: "Decorative", price: 189),
+        Rock(name: "Slatescape (🇨🇦)", type: "Decorative", price: 184),
+        Rock(name: "Charcoal Black Granite", type: "Decorative", price: 170),
+        Rock(name: "Ebony Black Granite", type: "Decorative", price: 229),
+        Rock(name: "Peastone (1/4 or 1/2)", type: "Decorative", price: 76),
+        Rock(name: "Red Granite", type: "Decorative", price: 167),
+        Rock(name: "Packing Gravel (0-3/4)", type: "Aggregate", price: 43.75),
+        Rock(name: "Driveway Gravel", type: "Aggregate", price: 67),
+        Rock(name: "Clear Drainage", type: "Aggregate", price: 61),
+        Rock(name: "Blue Chip", type: "Aggregate", price: 76),
+        Rock(name: "Fine Screening", type: "Aggregate", price: 67),
+        Rock(name: "Regular Screening", type: "Aggregate", price: 33)
+    ]
+
+    var filteredRocks: [Rock] {
+        var list = rocks
+        if rockTypeFilter != "All" {
+            list = list.filter { $0.type == rockTypeFilter }
+        }
+        switch rockSortOption {
+        case "Price: Low to High": return list.sorted { $0.price < $1.price }
+        case "Alphabetical": return list.sorted { $0.name < $1.name }
+        default: return list
+        }
+    }
+
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 20) {
+                    areaInputSection
+                    materialTypeSection
+                    if materialType == "Soil" { soilOptionsSection }
+                    if materialType == "Mulch" { mulchOptionsSection }
+                    if materialType == "Rock" { rockOptionsSection }
+                    calculateButton
+                    if !result.isEmpty { volumeOutputSection }
+                    if !priceNoHST.isEmpty { priceOutputSection }
+                    footerSection
+                }.padding()
+            }
+            .navigationTitle("Welcome, Alex!")
+        }
+    }
+
+    var areaInputSection: some View {
+        Group {
+            Text("Enter Area Dimensions").font(.headline)
+            TextField("Length (ft)", text: $length).textFieldStyle(.roundedBorder).keyboardType(.decimalPad)
+            TextField("Width (ft)", text: $width).textFieldStyle(.roundedBorder).keyboardType(.decimalPad)
+            TextField("Depth (inches)", text: $depth).textFieldStyle(.roundedBorder).keyboardType(.decimalPad)
+        }
+    }
+
+    var materialTypeSection: some View {
+        Group {
+            Text("Material Type").font(.headline)
+            Picker("Material", selection: $materialType) {
+                ForEach(materialOptions, id: \.self) { Text($0) }
+            }.pickerStyle(.segmented)
+        }
+    }
+
+    var soilOptionsSection: some View {
+        Group {
+            Text("Soil Options").font(.headline)
+            Picker("Soil Grade", selection: $soilGrade) {
+                ForEach(soilGrades, id: \.self) { Text($0) }
+            }.pickerStyle(.segmented)
+            Toggle("Add 35% for compaction", isOn: $addCompaction)
+        }
+    }
+
+    var mulchOptionsSection: some View {
+        Group {
+            Text("Mulch Options").font(.headline)
+            Picker("Mulch Type", selection: $mulchType) {
+                ForEach(mulchTypes, id: \.self) { Text($0) }
+            }.pickerStyle(.segmented)
+        }
+    }
+
+    var rockOptionsSection: some View {
+        Group {
+            Text("Rock Type Filter").font(.headline)
+            Picker("Rock Filter", selection: $rockTypeFilter) {
+                ForEach(rockTypes, id: \.self) { Text($0) }
+            }.pickerStyle(.segmented)
+
+            Text("Sort By").font(.headline)
+            Picker("Sort", selection: $rockSortOption) {
+                ForEach(rockSortOptions, id: \.self) { Text($0) }
+            }.pickerStyle(.segmented)
+
+            Picker("Rock Option", selection: $selectedRockId) {
+                ForEach(filteredRocks) { rock in
+                    Text(rock.name).tag(rock.id as UUID?)
+                }
+            }.pickerStyle(.wheel)
+        }
+    }
+
+    var calculateButton: some View {
+        Button("Calculate Volume & Price") {
+            UIApplication.shared.endEditing()
+            calculateVolumeAndPrice()
+        }
+        .padding(.top, 10)
+        .frame(maxWidth: .infinity)
+        .buttonStyle(.borderedProminent)
+    }
+
+    var volumeOutputSection: some View {
+        Group {
+            Text("Estimated Volume").font(.headline)
+            Text(result)
+            Text(resultLbs)
+            Text(resultBags)
+        }
+    }
+
+    var priceOutputSection: some View {
+        Group {
+            Text("Estimated Price").font(.headline)
+            Text("Price (no HST): \(priceNoHST)")
+            Text("Price (w/ HST): \(priceWithHST)")
+            Text("Price (w/ HST + 50% markup): \(priceWithMarkup)")
+        }
+    }
+
+    var footerSection: some View {
+        Text("Coded by Alex Schmidt")
+            .font(.footnote)
+            .foregroundColor(.gray)
+            .padding(.top, 40)
+    }
+
+    func calculateVolumeAndPrice() {
+        guard let l = Double(length), let w = Double(width), let d = Double(depth) else {
+            result = "Please enter valid numbers."
+            priceNoHST = ""
+            priceWithHST = ""
+            priceWithMarkup = ""
+            resultLbs = ""
+            resultBags = ""
+            return
+        }
+
+        let volumeCubicFeet = l * w * (d / 12)
+        var adjustedVolume = volumeCubicFeet
+
+        switch materialType {
+        case "Soil":
+            if addCompaction { adjustedVolume *= 1.35 }
+        case "Mulch":
+            adjustedVolume *= 0.95
+        case "Rock":
+            adjustedVolume *= 0.85
+        default: break
+        }
+
+        let volumeCubicYards = adjustedVolume / 27
+        result = String(format: "%.2f cubic yards", volumeCubicYards)
+
+        // Convert to pounds (avg 2200 lbs per cubic yard)
+        let pounds = volumeCubicYards * 2200
+        resultLbs = String(format: "%.0f lbs", pounds)
+
+        // Estimate 40lb bags (round up)
+        let bags = Int(ceil(pounds / 40))
+        resultBags = "~\(bags) bags (40lb)"
+
+        var basePrice: Double? = nil
+        let selectedRock = rocks.first(where: { $0.id == selectedRockId })
+
+        if materialType == "Soil" {
+            basePrice = (soilGrade == "Grade 1") ? 26.0 : 21.0
+        } else if materialType == "Mulch" {
+            basePrice = (mulchType == "🇨🇦 Red") ? 64.0 : 53.0
+        } else if materialType == "Rock", let rock = selectedRock {
+            basePrice = rock.price
+        }
+
+        if let price = basePrice {
+            let noHST = price * volumeCubicYards
+            let withHST = noHST * 1.13
+            let withMarkup = withHST * 1.50
+            priceNoHST = String(format: "$%.2f", noHST)
+            priceWithHST = String(format: "$%.2f", withHST)
+            priceWithMarkup = String(format: "$%.2f", withMarkup)
+        } else {
+            priceNoHST = ""
+            priceWithHST = ""
+            priceWithMarkup = ""
+        }
+    }
+}
+
+#Preview {
+    ContentView()
+}
+
+extension UIApplication {
+    func endEditing() {
+        sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+    }
+}
+
